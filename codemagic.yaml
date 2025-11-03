@@ -7,10 +7,17 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: "com.MyAppWatcher"
+        # Убираем bundle_identifier отсюда, так как управляем им в скрипте
       vars:
+        # Переменные для бандлов
         APP_BUNDLE_ID: "com.MyAppWatcher"
-        SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID" # Бандл для Share Extension
+        SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID" # Обновлено
+        
+        # Переменные для профилей
+        APP_PROVISIONING_PROFILE: "AppWatcherProvisioning" # Из скриншота
+        SHARE_EXTENSION_PROVISIONING_PROFILE: "AppWatcherExtensionProvisioning" # Из скриншота
+        
+        # Общие переменные
         XCODE_PROJECT: "AppWatcher.xcodeproj"
         XCODE_SCHEME: "AppWatcher"
         APP_STORE_APPLE_ID: 6754845203
@@ -18,8 +25,18 @@ workflows:
     scripts:
       - name: Set up code signing settings on Xcode project
         script: |
-          # Этот скрипт найдет профили для ОБОИХ бандлов и применит их
-          xcode-project use-profiles
+          # Явно указываем профили для каждого таргета
+          # Сначала для основного приложения
+          xcode-project use-profiles \
+            --project "$XCODE_PROJECT" \
+            --bundle-id "$APP_BUNDLE_ID" \
+            --profile-name "$APP_PROVISIONING_PROFILE"
+            
+          # Затем для расширения
+          xcode-project use-profiles \
+            --project "$XCODE_PROJECT" \
+            --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" \
+            --profile-name "$SHARE_EXTENSION_PROVISIONING_PROFILE"
 
       - name: Increment build number
         script: |
@@ -36,9 +53,6 @@ workflows:
 
       - name: Build ipa for distribution
         script: |
-          # --- ВАЖНО: Только ОДИН шаг сборки ---
-          # Xcode при сборке основной схемы сам "подтянет" и встроит Share Extension.
-          # Отдельно собирать его не нужно.
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
@@ -49,13 +63,4 @@ workflows:
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
-      email:
-        recipients:
-          - eldig98986976758746356789654o02@gmail.com
-        notify:
-          success: true
-          failure: false
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true # Рекомендую true для первой сборки
-        submit_to_app_store: false
+      # ... (ваша секция publishing без изменений)
