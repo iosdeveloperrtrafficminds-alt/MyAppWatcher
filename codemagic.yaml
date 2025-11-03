@@ -6,22 +6,21 @@ workflows:
       app_store_connect: CodeMagic Api Key 1
     environment:
       ios_signing:
-        # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-        # Теперь это массив, так как у нас два бандла
         distribution_type: app_store
-        bundle_identifier:
-          - "com.MyAppWatcher"          # Бандл основного приложения
-          - "com.MyAppWatcher.MyAppWatcherShareID" # Бандл расширения
+        bundle_identifier: "com.MyAppWatcher"
       vars:
-        BUNDLE_ID: "com.MyAppWatcher" # Эта переменная может остаться для основной логики
+        APP_BUNDLE_ID: "com.MyAppWatcher"
+        SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID" # Бандл для Share Extension
         XCODE_PROJECT: "AppWatcher.xcodeproj"
         XCODE_SCHEME: "AppWatcher"
         APP_STORE_APPLE_ID: 6754845203
       xcode: 16.0
     scripts:
-      - name: Set up provisioning profiles settings on Xcode project
-        script: xcode-project use-profiles
-        
+      - name: Set up code signing settings on Xcode project
+        script: |
+          # Этот скрипт найдет профили для ОБОИХ бандлов и применит их
+          xcode-project use-profiles
+
       - name: Increment build number
         script: |
           cd $CM_BUILD_DIR
@@ -33,15 +32,17 @@ workflows:
             NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
           fi
           echo "Setting new build number to: $NEW_BUILD_NUMBER"
-          # agvtool -all обновит билд для ВСЕХ таргетов, это правильно, ничего менять не нужно.
           agvtool new-version -all $NEW_BUILD_NUMBER
 
       - name: Build ipa for distribution
         script: |
-          # Этот шаг НЕ МЕНЯЕТСЯ. Xcode сам знает, что нужно встроить расширение.
+          # --- ВАЖНО: Только ОДИН шаг сборки ---
+          # Xcode при сборке основной схемы сам "подтянет" и встроит Share Extension.
+          # Отдельно собирать его не нужно.
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
+            
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -56,6 +57,5 @@ workflows:
           failure: false
       app_store_connect:
         auth: integration
-        # Рекомендую сначала заливать в TestFlight для проверки
-        submit_to_testflight: true
+        submit_to_testflight: true # Рекомендую true для первой сборки
         submit_to_app_store: false
