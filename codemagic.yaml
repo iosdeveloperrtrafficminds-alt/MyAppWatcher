@@ -22,10 +22,10 @@ workflows:
               script: |
                 #!/bin/sh
                 set -e
-                echo "Fetching signing files..."
+                echo "Fetching all signing files..."
                 # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-                app-store-connect fetch-signing-files --bundle-id "$APP_BUNDLE_ID" --type IOS_APP_STORE
-                app-store-connect fetch-signing-files --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" --type IOS_APP_STORE
+                # Просто вызываем команду без аргументов. Она скачает ВСЕ профили.
+                app-store-connect fetch-signing-files
                 # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                 keychain initialize
                 keychain add-certificates
@@ -33,6 +33,7 @@ workflows:
               script: |
                 #!/bin/sh
                 set -e
+                # Этот скрипт найдет нужные профили среди всех скачанных
                 APP_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherProvisioning")
                 SHARE_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherExtensionProvisioning")
                 APP_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$APP_PROFILE_PATH"))
