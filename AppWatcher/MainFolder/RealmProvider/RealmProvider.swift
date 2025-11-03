@@ -1,25 +1,18 @@
+// НОВЫЙ, ЛОКАЛЬНЫЙ КОД
 import Foundation
 import RealmSwift
 
 enum RealmProvider {
-    // ID вашей App Group из Шага 1
-    static let appGroupId = "group.com.AppWatcher" 
-
+    // Просто возвращаем конфигурацию по умолчанию.
+    // Realm сам найдет, где создать локальную базу данных.
     static var configuration: Realm.Configuration {
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupId) else {
-            fatalError("Не удалось получить доступ к контейнеру App Group. Проверьте идентификатор.")
-        }
-        
-        let realmURL = containerURL.appendingPathComponent("shared.realm")
-        
-        var config = Realm.Configuration.defaultConfiguration
-        config.fileURL = realmURL
-        
-        return config
+        return Realm.Configuration.defaultConfiguration
     }
     
-    // Удобный метод для асинхронного доступа к Realm с общей конфигурацией
+    // Остальные методы остаются без изменений
     static func realm() async throws -> Realm {
+        // Мы все еще можем использовать этот удобный метод,
+        // но теперь он будет работать с конфигурацией по умолчанию.
         return try await Realm(configuration: configuration, actor: MainActor.shared)
     }
 }
