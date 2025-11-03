@@ -1,0 +1,57 @@
+workflows:
+  ios-native-workflow:
+    name: iOS Native
+    max_build_duration: 120
+    integrations:
+      app_store_connect: CodeMagic Api Key 1
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: "com.MyAppWatcher"
+      vars:
+        BUNDLE_ID: "com.MyAppWatcher"
+        XCODE_PROJECT: "AppWatcher.xcodeproj"
+        XCODE_SCHEME: "AppWatcher"
+        APP_STORE_APPLE_ID: 6754845203
+      xcode: 16.0
+    scripts:
+      - name: Set up provisioning profiles settings on Xcode project
+        script: xcode-project use-profiles
+      - name: Increment build number
+        script: |
+          cd $CM_BUILD_DIR # Переходим в директорию сборки
+          # Получаем последний номер сборки из TestFlight
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          echo "Latest uploaded build number from App Store Connect: $LATEST_BUILD_NUMBER"
+          # Увеличиваем номер сборки на 1. Если сборок не было или номер некорректен, начинаем с 1.
+          if [ -z "$LATEST_BUILD_NUMBER" ] || [ "$LATEST_BUILD_NUMBER" == "null" ] || ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]] || [ "$LATEST_BUILD_NUMBER" -lt 1 ]; then
+            NEW_BUILD_NUMBER=1
+          else
+            # Используем арифметическое выражение POSIX shell для инкремента
+            NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+          fi
+          echo "Setting new build number to: $NEW_BUILD_NUMBER"
+          # Устанавливаем новый номер сборки для всех таргетов в проекте (включая основной)
+          agvtool new-version -all $NEW_BUILD_NUMBER
+
+      - name: Build ipa for distribution (Main App)
+        script: |
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" # Используем основную схему
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      email:
+        recipients:
+          - eldig98986976758746356789654o02@gmail.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
