@@ -7,13 +7,16 @@ workflows:
         environment:
             ios_signing:
                 distribution_type: app_store
-                # --- ИСПРАВЛЕНИЕ: Перечисляем ВСЕ бандлы здесь ---
-                bundle_identifier:
-                    - "com.MyAppWatcher"
-                    - "com.MyAppWatcher.MyAppWatcherShareID"
+                bundle_identifier: com.MyAppWatcher # <<< Только основной
             vars:
-                # Нам больше не нужны переменные для профилей и UUID
-                APP_BUNDLE_ID: com.MyAppWatcher
+                # --- ИСПРАВЛЕНИЕ ЗДЕСЬ: Специальный синтаксис для доп. бандлов ---
+                PROVISIONING_PROFILES: |
+                    [
+                        {
+                            "bundle_id": "com.MyAppWatcher.MyAppWatcherShareID",
+                            "profile_name": "AppWatcherExtensionProvisioning"
+                        }
+                    ]
                 XCODE_PROJECT: AppWatcher.xcodeproj
                 XCODE_SCHEME: AppWatcher
                 APP_STORE_APPLE_ID: 6754845203
@@ -23,9 +26,7 @@ workflows:
               script: |
                 #!/bin/sh
                 set -e
-                # --- ИСПРАВЛЕНИЕ: Один-единственный, простой вызов ---
-                # Эта команда теперь получит список бандлов из ios_signing
-                # и сама найдет и применит для них профили.
+                # Эта команда теперь увидит PROVISIONING_PROFILES и применит их
                 xcode-project use-profiles
             - name: Increment build number
               script: |
@@ -43,15 +44,12 @@ workflows:
               script: |
                 #!/bin/sh
                 set -e
-                # --- ИСПРАВЛЕНИЕ: Возвращаемся к простому build-ipa ---
-                # Теперь, когда профили правильно установлены,
-                # эта команда должна сама сгенерировать export_options.plist
                 xcode-project build-ipa \
                   --project "$XCODE_PROJECT" \
                   --scheme "$XCODE_SCHEME"
         artifacts:
             - build/ios/ipa/*.ipa
-            - /tmp/xcodebuild_logs/*.log
+            - /tmp/xcode_logs/*.log
             - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
             - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
         publishing:
