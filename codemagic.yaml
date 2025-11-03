@@ -7,19 +7,16 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        # --- ИСПРАВЛЕНИЕ: Возвращаем основной бандл сюда ---
-        # Это нужно для Codenagic, чтобы он знал, какие сертификаты качать.
         bundle_identifier: "com.MyAppWatcher"
       vars:
-        # Переменные для бандлов
         APP_BUNDLE_ID: "com.MyAppWatcher"
         SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID"
         
-        # Переменные для профилей
-        APP_PROVISIONING_PROFILE: "AppWatcherProvisioning"
-        SHARE_EXTENSION_PROVISIONING_PROFILE: "AppWatcherExtensionProvisioning"
+        # Получаем UUID профилей из переменных окружения Codemagic
+        # Имена переменных: PROVISIONING_PROFILE_UDID_<base64_encoded_profile_name>
+        APP_PROVISIONING_PROFILE_UUID: $PROVISIONING_PROFILE_UDID_QXBwV2F0Y2hlclByb3Zpc2lvbmluZw==
+        SHARE_EXTENSION_PROVISIONING_PROFILE_UUID: $PROVISIONING_PROFILE_UDID_QXBwV2F0Y2hlckV4dGVuc2lvblByb3Zpc2lvbmluZw==
         
-        # Общие переменные
         XCODE_PROJECT: "AppWatcher.xcodeproj"
         XCODE_SCHEME: "AppWatcher"
         APP_STORE_APPLE_ID: 6754845203
@@ -27,23 +24,22 @@ workflows:
     scripts:
       - name: Set up code signing settings on Xcode project
         script: |
-          # Этот скрипт переопределит настройки подписи для каждого таргета
+          # Этот скрипт напрямую вписывает UUID профилей в файл проекта
           
-          # Сначала для основного приложения
-          echo "Setting profile for main app..."
-          xcode-project use-profiles \
-            --project "$XCODE_PROJECT" \
-            --target "AppWatcher" \
-            --bundle-id "$APP_BUNDLE_ID" \
-            --profile-name "$APP_PROVISIONING_PROFILE"
-            
-          # Затем для расширения
-          echo "Setting profile for share extension..."
-          xcode-project use-profiles \
-            --project "$XCODE_PROJECT" \
-            --target "MyAppWatcherShare" \
-            --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" \
-            --profile-name "$SHARE_EXTENSION_PROVISIONING_PROFILE"
+          PROJECT_FILE="$CM_BUILD_DIR/$XCODE_PROJECT/project.pbxproj"
+          
+          echo "Setting up manual code signing..."
+          # Переключаем ВСЕ таргеты на ручную подпись
+          sed -i.bak -E 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/' "$PROJECT_FILE"
+
+          echo "Injecting provisioning profile UUIDs..."
+          # Для основного приложения
+          sed -i.bak -E "/PRODUCT_BUNDLE_IDENTIFIER = ${APP_BUNDLE_ID//./\\.}/,/;/ s/PROVISIONING_PROFILE_SPECIFIER = \".*\";/PROVISIONING_PROFILE_SPECIFIER = \"$APP_PROVISIONING_PROFILE_UUID\";/" "$PROJECT_FILE"
+          
+          # Для расширения
+          sed -i.bak -E "/PRODUCT_BUNDLE_IDENTIFIER = ${SHARE_EXTENSION_BUNDLE_ID//./\\.}/,/;/ s/PROVISIONING_PROFILE_SPECIFIER = \".*\";/PROVISIONING_PROFILE_SPECIFIER = \"$SHARE_EXTENSION_PROVISIONING_PROFILE_UUID\";/" "$PROJECT_FILE"
+          
+          echo "Code signing settings applied."
 
       - name: Increment build number
         script: |
@@ -70,7 +66,6 @@ workflows:
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
-      # --- ИСПРАВЛЕНИЕ: Возвращаем вашу секцию publishing ---
       email:
         recipients:
           - eldig98986976758746356789654o02@gmail.com
