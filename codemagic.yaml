@@ -7,41 +7,26 @@ workflows:
         environment:
             ios_signing:
                 distribution_type: app_store
-                bundle_identifier: com.MyAppWatcher
+                # --- ИСПРАВЛЕНИЕ: Перечисляем ВСЕ бандлы здесь ---
+                bundle_identifier:
+                    - "com.MyAppWatcher"
+                    - "com.MyAppWatcher.MyAppWatcherShareID"
             vars:
+                # Нам больше не нужны переменные для профилей и UUID
                 APP_BUNDLE_ID: com.MyAppWatcher
-                SHARE_EXTENSION_BUNDLE_ID: com.MyAppWatcher.MyAppWatcherShareID
-                APP_PROVISIONING_PROFILE_NAME: AppWatcherProvisioning
-                SHARE_EXTENSION_PROVISIONING_PROFILE_NAME: AppWatcherExtensionProvisioning
                 XCODE_PROJECT: AppWatcher.xcodeproj
                 XCODE_SCHEME: AppWatcher
                 APP_STORE_APPLE_ID: 6754845203
             xcode: 16.0
         scripts:
-            - name: Install signing files
+            - name: Set up code signing
               script: |
                 #!/bin/sh
                 set -e
-                echo "Fetching all signing files..."
-                # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-                # Просто вызываем команду без аргументов. Она скачает ВСЕ профили.
-                app-store-connect fetch-signing-files
-                # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-                keychain initialize
-                keychain add-certificates
-            - name: Set up code signing properties
-              script: |
-                #!/bin/sh
-                set -e
-                # Этот скрипт найдет нужные профили среди всех скачанных
-                APP_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherProvisioning")
-                SHARE_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherExtensionProvisioning")
-                APP_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$APP_PROFILE_PATH"))
-                SHARE_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$SHARE_PROFILE_PATH"))
-                echo "export APP_PROFILE_UUID=$APP_PROFILE_UUID" >> $CM_ENV
-                echo "export SHARE_PROFILE_UUID=$SHARE_PROFILE_UUID" >> $CM_ENV
-                echo "Provisioning UUID for App: $APP_PROFILE_UUID"
-                echo "Provisioning UUID for Extension: $SHARE_PROFILE_UUID"
+                # --- ИСПРАВЛЕНИЕ: Один-единственный, простой вызов ---
+                # Эта команда теперь получит список бандлов из ios_signing
+                # и сама найдет и применит для них профили.
+                xcode-project use-profiles
             - name: Increment build number
               script: |
                 #!/bin/sh
@@ -58,46 +43,12 @@ workflows:
               script: |
                 #!/bin/sh
                 set -e
-                set -x
-                xcodebuild archive \
-                  -project "$XCODE_PROJECT" \
-                  -scheme "$XCODE_SCHEME" \
-                  -archivePath "$CM_BUILD_DIR/build/AppWatcher.xcarchive" \
-                  OTHER_CODE_SIGN_FLAGS="--keychain $CM_KEYCHAIN_PATH" \
-                  CODE_SIGN_STYLE=Manual \
-                  CODE_SIGN_IDENTITY="Apple Distribution" \
-                  PROVISIONING_PROFILE_SPECIFIER="$APP_PROVISIONING_PROFILE_NAME" \
-                  PROVISIONING_PROFILE="$APP_PROFILE_UUID" \
-                  PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID"
-            - name: Export IPA
-              script: |
-                #!/bin/sh
-                set -e
-                cat > export_options.plist <<EOF
-                <?xml version="1.0" encoding="UTF-8"?>
-                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-                <plist version="1.0">
-                <dict>
-                    <key>method</key>
-                    <string>app-store</string>
-                    <key>provisioningProfiles</key>
-                    <dict>
-                        <key>$APP_BUNDLE_ID</key>
-                        <string>$APP_PROVISIONING_PROFILE_NAME</string>
-                        <key>$SHARE_EXTENSION_BUNDLE_ID</key>
-                        <string>$SHARE_EXTENSION_PROVISIONING_PROFILE_NAME</string>
-                    </dict>
-                    <key>signingStyle</key>
-                    <string>manual</string>
-                    <key>teamID</key>
-                    <string>$CM_TEAM_ID</string>
-                </dict>
-                </plist>
-                EOF
-                xcodebuild -exportArchive \
-                  -archivePath "$CM_BUILD_DIR/build/AppWatcher.xcarchive" \
-                  -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
-                  -exportOptionsPlist "export_options.plist"
+                # --- ИСПРАВЛЕНИЕ: Возвращаемся к простому build-ipa ---
+                # Теперь, когда профили правильно установлены,
+                # эта команда должна сама сгенерировать export_options.plist
+                xcode-project build-ipa \
+                  --project "$XCODE_PROJECT" \
+                  --scheme "$XCODE_SCHEME"
         artifacts:
             - build/ios/ipa/*.ipa
             - /tmp/xcodebuild_logs/*.log
