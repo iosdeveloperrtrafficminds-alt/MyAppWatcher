@@ -1,126 +1,113 @@
 workflows:
     ios-native-workflow:
-    name: iOS Native
-    max_build_duration: 120
-    integrations:
-        app_store_connect: CodeMagic Api Key 1
-    environment:
-        ios_signing:
-        distribution_type: app_store
-        bundle_identifier: "com.MyAppWatcher"
-        vars:
-        APP_BUNDLE_ID: "com.MyAppWatcher"
-        SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID"
-        
-        APP_PROVISIONING_PROFILE_NAME: "AppWatcherProvisioning"
-        SHARE_EXTENSION_PROVISIONING_PROFILE_NAME: "AppWatcherExtensionProvisioning"
-        
-        XCODE_PROJECT: "AppWatcher.xcodeproj"
-        XCODE_SCHEME: "AppWatcher"
-        APP_STORE_APPLE_ID: 6754845203
-        xcode: 16.0
-    scripts:
-        - name: Install signing files
-        script: |
-          # --- НОВЫЙ ПОДХОД: Явно скачиваем все, что нужно ---
-          echo "Fetching signing files..."
-          # Скачиваем профили для обоих бандлов
-          app-store-connect fetch-signing-files --bundle-id "$APP_BUNDLE_ID" --type APP_STORE
-          app-store-connect fetch-signing-files --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" --type APP_STORE
-          
-          # Устанавливаем сертификаты в keychain
-          keychain initialize
-          keychain add-certificates
-        
-        - name: Set up code signing properties
-        script: |
-          # --- НОВЫЙ ПОDХОД: Устанавливаем переменные для xcodebuild ---
-          # Находим UUID скачанных профилей. Codemagic кладет их по известному пути.
-          APP_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherProvisioning")
-          SHARE_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherExtensionProvisioning")
-          
-          APP_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$APP_PROFILE_PATH"))
-          SHARE_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$SHARE_PROFILE_PATH"))
-          
-          # Экспортируем UUID как переменные окружения, чтобы xcodebuild их увидел
-          echo "export APP_PROFILE_UUID=$APP_PROFILE_UUID" >> $CM_ENV
-          echo "export SHARE_PROFILE_UUID=$SHARE_PROFILE_UUID" >> $CM_ENV
-          
-          echo "Provisioning UUID for App: $APP_PROFILE_UUID"
-          echo "Provisioning UUID for Extension: $SHARE_PROFILE_UUID"
-        
-        - name: Increment build number
-        script: |
-          cd $CM_BUILD_DIR
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
-          if [ -z "$LATEST_BUILD_NUMBER" ] || [ "$LATEST_BUILD_NUMBER" == "null" ] || ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]] || [ "$LATEST_BUILD_NUMBER" -lt 1 ]; then
-            NEW_BUILD_NUMBER=1
-          else
-            NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
-          fi
-          agvtool new-version -all $NEW_BUILD_NUMBER
-        
-        - name: Build and Archive
-        script: |
-            # --- НОВЫЙ ПОДХОД: Используем чистый xcodebuild с явными настройками ---
-            set -x # Включаем подробный лог команд
-            
-            xcodebuild archive \
-            -project "$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -archivePath "$CM_BUILD_DIR/build/AppWatcher.xcarchive" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $CM_KEYCHAIN_PATH" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="$APP_PROVISIONING_PROFILE_NAME" \
-            PROVISIONING_PROFILE="$APP_PROFILE_UUID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID"
-        
-        - name: Export IPA
-        script: |
-            # --- НОВЫЙ ПОДХОД: Отдельный шаг для экспорта ---
-            # Создаем export_options.plist
-            cat > export_options.plist <<EOF
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>method</key>
-              <string>app-store</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>$APP_BUNDLE_ID</key>
-                  <string>$APP_PROVISIONING_PROFILE_NAME</string>
-                  <key>$SHARE_EXTENSION_BUNDLE_ID</key>
-                  <string>$SHARE_EXTENSION_PROVISIONING_PROFILE_NAME</string>
-              </dict>
-              <key>signingStyle</key>
-              <string>manual</string>
-              <key>teamID</key>
-              <string>$CM_TEAM_ID</string>
-            </dict>
-            </plist>
-            EOF
-            
-            xcodebuild -exportArchive \
-            -archivePath "$CM_BUILD_DIR/build/AppWatcher.xcarchive" \
-            -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
-            -exportOptionsPlist "export_options.plist"
-        
+        name: iOS Native
+        max_build_duration: 120
+        integrations:
+            app_store_connect: CodeMagic Api Key 1
+        environment:
+            ios_signing:
+                distribution_type: app_store
+                bundle_identifier: com.MyAppWatcher
+            vars:
+                APP_BUNDLE_ID: com.MyAppWatcher
+                SHARE_EXTENSION_BUNDLE_ID: com.MyAppWatcher.MyAppWatcherShareID
+                APP_PROVISIONING_PROFILE_NAME: AppWatcherProvisioning
+                SHARE_EXTENSION_PROVISIONING_PROFILE_NAME: AppWatcherExtensionProvisioning
+                XCODE_PROJECT: AppWatcher.xcodeproj
+                XCODE_SCHEME: AppWatcher
+                APP_STORE_APPLE_ID: 6754845203
+            xcode: 16.0
+        scripts:
+            - name: Install signing files
+              script: |
+                #!/bin/sh
+                set -e
+                echo "Fetching signing files..."
+                app-store-connect fetch-signing-files --bundle-id "$APP_BUNDLE_ID" --type APP_STORE
+                app-store-connect fetch-signing-files --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" --type APP_STORE
+                keychain initialize
+                keychain add-certificates
+            - name: Set up code signing properties
+              script: |
+                #!/bin/sh
+                set -e
+                APP_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherProvisioning")
+                SHARE_PROFILE_PATH=$(find $HOME/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" -print0 | xargs -0 grep -l "AppWatcherExtensionProvisioning")
+                APP_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$APP_PROFILE_PATH"))
+                SHARE_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$SHARE_PROFILE_PATH"))
+                echo "export APP_PROFILE_UUID=$APP_PROFILE_UUID" >> $CM_ENV
+                echo "export SHARE_PROFILE_UUID=$SHARE_PROFILE_UUID" >> $CM_ENV
+                echo "Provisioning UUID for App: $APP_PROFILE_UUID"
+                echo "Provisioning UUID for Extension: $SHARE_PROFILE_UUID"
+            - name: Increment build number
+              script: |
+                #!/bin/sh
+                set -e
+                cd $CM_BUILD_DIR
+                LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+                if [ -z "$LATEST_BUILD_NUMBER" ] || [ "$LATEST_BUILD_NUMBER" == "null" ] || ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]] || [ "$LATEST_BUILD_NUMBER" -lt 1 ]; then
+                  NEW_BUILD_NUMBER=1
+                else
+                  NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+                fi
+                agvtool new-version -all $NEW_BUILD_NUMBER
+            - name: Build and Archive
+              script: |
+                #!/bin/sh
+                set -e
+                set -x
+                xcodebuild archive \
+                  -project "$XCODE_PROJECT" \
+                  -scheme "$XCODE_SCHEME" \
+                  -archivePath "$CM_BUILD_DIR/build/AppWatcher.xcarchive" \
+                  OTHER_CODE_SIGN_FLAGS="--keychain $CM_KEYCHAIN_PATH" \
+                  CODE_SIGN_STYLE=Manual \
+                  CODE_SIGN_IDENTITY="Apple Distribution" \
+                  PROVISIONING_PROFILE_SPECIFIER="$APP_PROVISIONING_PROFILE_NAME" \
+                  PROVISIONING_PROFILE="$APP_PROFILE_UUID" \
+                  PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID"
+            - name: Export IPA
+              script: |
+                #!/bin/sh
+                set -e
+                cat > export_options.plist <<EOF
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                <plist version="1.0">
+                <dict>
+                    <key>method</key>
+                    <string>app-store</string>
+                    <key>provisioningProfiles</key>
+                    <dict>
+                        <key>$APP_BUNDLE_ID</key>
+                        <string>$APP_PROVISIONING_PROFILE_NAME</string>
+                        <key>$SHARE_EXTENSION_BUNDLE_ID</key>
+                        <string>$SHARE_EXTENSION_PROVISIONING_PROFILE_NAME</string>
+                    </dict>
+                    <key>signingStyle</key>
+                    <string>manual</string>
+                    <key>teamID</key>
+                    <string>$CM_TEAM_ID</string>
+                </dict>
+                </plist>
+                EOF
+                xcodebuild -exportArchive \
+                  -archivePath "$CM_BUILD_DIR/build/AppWatcher.xcarchive" \
+                  -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
+                  -exportOptionsPlist "export_options.plist"
         artifacts:
-        - build/ios/ipa/*.ipa
-        - /tmp/xcodebuild_logs/*.log
-        - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
-        - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-    publishing:
-        email:
-        recipients:
-            - eldig98986976758746356789654o02@gmail.com
-        notify:
-            success: true
-            failure: false
-        app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        submit_to_app_store: false
-
+            - build/ios/ipa/*.ipa
+            - /tmp/xcodebuild_logs/*.log
+            - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+            - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+        publishing:
+            email:
+                recipients:
+                    - eldig98986976758746-lorem-ipsum-dolar-sit-amet@gmail.com
+                notify:
+                    success: true
+                    failure: false
+            app_store_connect:
+                auth: integration
+                submit_to_testflight: true
+                submit_to_app_store: false
