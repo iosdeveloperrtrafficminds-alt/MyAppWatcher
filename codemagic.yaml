@@ -23,8 +23,10 @@ workflows:
                 #!/bin/sh
                 set -e
                 echo "Fetching signing files..."
-                app-store-connect fetch-signing-files --bundle-id "$APP_BUNDLE_ID" --type APP_STORE
-                app-store-connect fetch-signing-files --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" --type APP_STORE
+                # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+                app-store-connect fetch-signing-files --bundle-id "$APP_BUNDLE_ID" --type IOS_APP_STORE
+                app-store-connect fetch-signing-files --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" --type IOS_APP_STORE
+                # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                 keychain initialize
                 keychain add-certificates
             - name: Set up code signing properties
