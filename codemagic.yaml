@@ -12,11 +12,13 @@ workflows:
         APP_BUNDLE_ID: "com.MyAppWatcher"
         SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID"
         
-        APP_PROVISIONING_PROFILE: "AppWatcherProvisioning"
-        SHARE_EXTENSION_PROVISIONING_PROFILE: "AppWatcherExtensionProvisioning"
+        APP_PROVISIONING_PROFILE_NAME: "AppWatcherProvisioning"
+        SHARE_EXTENSION_PROVISIONING_PROFILE_NAME: "AppWatcherExtensionProvisioning"
         
-        # Codemagic автоматически создает переменную $CM_TEAM_ID
-        # TEAM_ID: "H2V698KL5P" # Можно указать явно, но $CM_TEAM_ID надежнее
+        # Получаем UUID профилей из переменных окружения Codemagic
+        # Имена переменных: PROVISIONING_PROFILE_UDID_<base64_encoded_profile_name>
+        APP_PROVISIONING_PROFILE_UUID: $PROVISIONING_PROFILE_UDID_QXBwV2F0Y2hlclByb3Zpc2lvbmluZw== # Base64 от "AppWatcherProvisioning"
+        SHARE_EXTENSION_PROVISIONING_PROFILE_UUID: $PROVISIONING_PROFILE_UDID_QXBwV2F0Y2hlckV4dGVuc2lvblByb3Zpc2lvbmluZw== # Base64 от "AppWatcherExtensionProvisioning"
         
         XCODE_PROJECT: "AppWatcher.xcodeproj"
         XCODE_SCHEME: "AppWatcher"
@@ -25,12 +27,21 @@ workflows:
     scripts:
       - name: Set up code signing settings on Xcode project
         script: |
-          # Этот скрипт все еще нужен для этапа архивации
           PROJECT_FILE="$CM_BUILD_DIR/$XCODE_PROJECT/project.pbxproj"
+          
           echo "Setting up manual code signing for archive..."
+          # Переключаем ВСЕ таргеты на ручную подпись
           sed -i.bak -E 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/' "$PROJECT_FILE"
-          sed -i.bak -E "/PRODUCT_BUNDLE_IDENTIFIER = ${APP_BUNDLE_ID//./\\.}/,/;/ s/PROVISIONING_PROFILE_SPECIFIER = \".*\";/PROVISIONING_PROFILE_SPECIFIER = \"$APP_PROVISIONING_PROFILE\";/" "$PROJECT_FILE"
+          
+          echo "Injecting provisioning profile UUIDs for archive..."
+          # Для основного приложения - меняем оба ключа (старый и новый)
+          sed -i.bak -E "/PRODUCT_BUNDLE_IDENTIFIER = ${APP_BUNDLE_ID//./\\.}/,/;/ s/PROVISIONING_PROFILE_SPECIFIER = \".*\";/PROVISIONING_PROFILE_SPECIFIER = \"$APP_PROVISIONING_PROFILE_UUID\";/" "$PROJECT_FILE"
+          sed -i.bak -E "/PRODUCT_BUNDLE_IDENTIFIER = ${APP_BUNDLE_ID//./\\.}/,/;/ s/PROVISIONING_PROFILE = \".*\";/PROVISIONING_PROFILE = \"$APP_PROVISIONING_PROFILE_UUID\";/" "$PROJECT_FILE"
+
+          # Для расширения - меняем оба ключа (старый и новый)
           sed -i.bak -E "/PRODUCT_BUNDLE_IDENTIFIER = ${SHARE_EXTENSION_BUNDLE_ID//./\\.}/,/;/ s/PROVISIONING_PROFILE_SPECIFIER = \".*\";/PROVISIONING_PROFILE_SPECIFIER = \"$SHARE_EXTENSION_PROVISIONING_PROFILE_UUID\";/" "$PROJECT_FILE"
+          sed -i.bak -E "/PRODUCT_BUNDLE_IDENTIFIER = ${SHARE_EXTENSION_BUNDLE_ID//./\\.}/,/;/ s/PROVISIONING_PROFILE = \".*\";/PROVISIONING_PROFILE = \"$SHARE_EXTENSION_PROVISIONING_PROFILE_UUID\";/" "$PROJECT_FILE"
+          
           echo "Code signing settings for archive applied."
 
       - name: Increment build number
@@ -48,7 +59,6 @@ workflows:
 
       - name: Build ipa for distribution
         script: |
-          # --- НОВЫЙ БЛОК: Создаем export_options.plist ---
           echo "Creating export_options.plist..."
           cat > export_options.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -60,9 +70,9 @@ workflows:
               <key>provisioningProfiles</key>
               <dict>
                   <key>$APP_BUNDLE_ID</key>
-                  <string>$APP_PROVISIONING_PROFILE</string>
+                  <string>$APP_PROVISIONING_PROFILE_NAME</string>
                   <key>$SHARE_EXTENSION_BUNDLE_ID</key>
-                  <string>$SHARE_EXTENSION_PROVISIONING_PROFILE</string>
+                  <string>$SHARE_EXTENSION_PROVISIONING_PROFILE_NAME</string>
               </dict>
               <key>signingStyle</key>
               <string>manual</string>
@@ -74,9 +84,7 @@ workflows:
 
           echo "export_options.plist created:"
           cat export_options.plist
-          # --- КОНЕЦ НОВОГО БЛОКА ---
 
-          # --- ИЗМЕНЕНИЕ: Добавляем путь к нашему файлу ---
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME" \
