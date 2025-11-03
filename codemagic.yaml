@@ -7,15 +7,17 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        # Убираем bundle_identifier отсюда, так как управляем им в скрипте
+        # --- ИСПРАВЛЕНИЕ: Возвращаем основной бандл сюда ---
+        # Это нужно для Codenagic, чтобы он знал, какие сертификаты качать.
+        bundle_identifier: "com.MyAppWatcher"
       vars:
         # Переменные для бандлов
         APP_BUNDLE_ID: "com.MyAppWatcher"
-        SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID" # Обновлено
+        SHARE_EXTENSION_BUNDLE_ID: "com.MyAppWatcher.MyAppWatcherShareID"
         
         # Переменные для профилей
-        APP_PROVISIONING_PROFILE: "AppWatcherProvisioning" # Из скриншота
-        SHARE_EXTENSION_PROVISIONING_PROFILE: "AppWatcherExtensionProvisioning" # Из скриншота
+        APP_PROVISIONING_PROFILE: "AppWatcherProvisioning"
+        SHARE_EXTENSION_PROVISIONING_PROFILE: "AppWatcherExtensionProvisioning"
         
         # Общие переменные
         XCODE_PROJECT: "AppWatcher.xcodeproj"
@@ -25,16 +27,21 @@ workflows:
     scripts:
       - name: Set up code signing settings on Xcode project
         script: |
-          # Явно указываем профили для каждого таргета
+          # Этот скрипт переопределит настройки подписи для каждого таргета
+          
           # Сначала для основного приложения
+          echo "Setting profile for main app..."
           xcode-project use-profiles \
             --project "$XCODE_PROJECT" \
+            --target "AppWatcher" \
             --bundle-id "$APP_BUNDLE_ID" \
             --profile-name "$APP_PROVISIONING_PROFILE"
             
           # Затем для расширения
+          echo "Setting profile for share extension..."
           xcode-project use-profiles \
             --project "$XCODE_PROJECT" \
+            --target "MyAppWatcherShare" \
             --bundle-id "$SHARE_EXTENSION_BUNDLE_ID" \
             --profile-name "$SHARE_EXTENSION_PROVISIONING_PROFILE"
 
@@ -63,4 +70,14 @@ workflows:
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
-      # ... (ваша секция publishing без изменений)
+      # --- ИСПРАВЛЕНИЕ: Возвращаем вашу секцию publishing ---
+      email:
+        recipients:
+          - eldig98986976758746356789654o02@gmail.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
